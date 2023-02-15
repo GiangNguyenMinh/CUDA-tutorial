@@ -1,0 +1,12 @@
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/CMakeFiles/cuda_tutorial.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part1_ProgramingModel/CMakeFiles/part1_programing_model.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part1_ProgramingModel/CMakeFiles/edit_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part1_ProgramingModel/CMakeFiles/rebuild_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part2_ComplierNvcc/CMakeFiles/part2_complier_nvcc.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part2_ComplierNvcc/CMakeFiles/edit_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part2_ComplierNvcc/CMakeFiles/rebuild_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part3_CUDARuntime/CMakeFiles/part3_cudaruntime.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part3_CUDARuntime/CMakeFiles/edit_cache.dir
+/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug/Part3_CUDARuntime/CMakeFiles/rebuild_cache.dir

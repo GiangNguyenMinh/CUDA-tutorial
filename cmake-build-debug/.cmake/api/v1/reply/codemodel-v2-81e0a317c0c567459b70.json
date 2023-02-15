@@ -1,0 +1,138 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1,
+						2,
+						3
+					],
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				},
+				{
+					"build" : "Part1_ProgramingModel",
+					"jsonFile" : "directory-Part1_ProgramingModel-Debug-af3e41e6fa31d907e8f7.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "Part1_ProgramingModel",
+					"targetIndexes" : 
+					[
+						1
+					]
+				},
+				{
+					"build" : "Part2_ComplierNvcc",
+					"jsonFile" : "directory-Part2_ComplierNvcc-Debug-fbbb6e746be9dfef3fa4.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "Part2_ComplierNvcc",
+					"targetIndexes" : 
+					[
+						2
+					]
+				},
+				{
+					"build" : "Part3_CUDARuntime",
+					"jsonFile" : "directory-Part3_CUDARuntime-Debug-38bf2a7bd712722ec166.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.24"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 0,
+					"source" : "Part3_CUDARuntime",
+					"targetIndexes" : 
+					[
+						3
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					],
+					"name" : "cuda_tutorial",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2,
+						3
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "cuda_tutorial::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-cuda_tutorial-Debug-ec73f63b5d4e0f6c61ef.json",
+					"name" : "cuda_tutorial",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 1,
+					"id" : "part1_programing_model::@216a042032f6313a5127",
+					"jsonFile" : "target-part1_programing_model-Debug-112c6a4fd27feb0b1cdc.json",
+					"name" : "part1_programing_model",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "part2_complier_nvcc::@2dab3759c59b4bd90818",
+					"jsonFile" : "target-part2_complier_nvcc-Debug-2ff66e889b9b6df18ce9.json",
+					"name" : "part2_complier_nvcc",
+					"projectIndex" : 0
+				},
+				{
+					"directoryIndex" : 3,
+					"id" : "part3_cudaruntime::@c2518ef94887064bb3fc",
+					"jsonFile" : "target-part3_cudaruntime-Debug-40d2840bad3e85595fa5.json",
+					"name" : "part3_cudaruntime",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/giangnm/CLionProjects/cuda-tutorial/cmake-build-debug",
+		"source" : "/home/giangnm/CLionProjects/cuda-tutorial"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 4
+	}
+}
