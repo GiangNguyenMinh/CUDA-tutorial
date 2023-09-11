@@ -1,0 +1,15 @@
+Load: 
+	IPluginCreator -> Creator::getPluginNameSpage -> creator::getPluginName -> creator::getPluginVersion
+	
+Build:
+	Build: 
+		Creator::getPluginVersion -> Creator::getPluginNameSpace -> Creator::createPlugin -> IPluginContructor1 -> setPluginNameSpace -> getNbOuputs
+		-> getOutputDataType -> getPluginType -> isOutputBroadCast -> getOutputDims -> supportFormat -> configurePlugin -> getWorkSpaceSize -> initialize 
+			|													-> destroy -> decontructor1	
+			|-> clone -> IPluginConstructor1 -> setPluginNameSpace -> ...
+			
+	Serialize: 
+		getPluginType -> getPluginVersion -> getPluginNameSpace -> getSerializeSize -> serialize -> destroy -> decontructor1
+		
+Runtime: 
+
