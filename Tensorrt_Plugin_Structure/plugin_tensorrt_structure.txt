@@ -1,15 +1,21 @@
-Load: 
-	IPluginCreator -> Creator::getPluginNameSpage -> creator::getPluginName -> creator::getPluginVersion
-	
-Build:
+Build and Serialize:
+	Check Plugin: 
+		IPluginCreator -> creator::getPluginName -> creator::getPluginNameSpage -> creator::getPluginVersion
+
+	Load Weight: 
+		creator::getPluginVersion -> creator::getPluginNameSpace -> creator::createPlugin -> IPluginContructor1 -> setPluginNameSpace -> getNbOuputs
+		-> getPluginType
+		
 	Build: 
-		Creator::getPluginVersion -> Creator::getPluginNameSpace -> Creator::createPlugin -> IPluginContructor1 -> setPluginNameSpace -> getNbOuputs
-		-> getOutputDataType -> getPluginType -> isOutputBroadCast -> getOutputDims -> supportFormat -> configurePlugin -> getWorkSpaceSize -> initialize 
-			|													-> destroy -> decontructor1	
-			|-> clone -> IPluginConstructor1 -> setPluginNameSpace -> ...
+		getOutputDataType -> isOutputBroadCast -> getOutputDims -> supportFormat -> configurePlugin -> getWorkSpaceSize -> initialize -> destroy -> decontructor1	
+	*** clone -> IPluginConstructor1 -> setPluginNameSpace -> ... (only in Load Weight and Build) 
 			
 	Serialize: 
-		getPluginType -> getPluginVersion -> getPluginNameSpace -> getSerializeSize -> serialize -> destroy -> decontructor1
+		getPluginType -> getPluginVersion -> getPluginNameSpace -> getSerializeSize -> serialize -> terminate -> destroy -> decontructor1
 		
-Runtime: 
-
+Runtime:
+	Check Plugin: 
+		IPluginCreator -> creator::getPluginName -> Creator::getPluginNameSpage -> creator::getPluginVersion 
+	Deserialize: 
+		creator::deserializePlugin -> IPluginContructor2 -> setPluginNamespace -> initialize -> equeue 	
+	*** clone -> setPluginNamespace -> attachToContext
