@@ -1,0 +1,24 @@
+VmSize: vitural memory size - all RAM and Swappout 
+VmData: size of data segment 
+VmStk: stack size 
+VmExe: size of text segment 
+VmData = data + bss + heap 
+
+VmRSS: how much memory in RAM is occupied by the process, The rest extra memory has either been not used or has been swapped out
+
+
+/prod/pid/smaps: heap and stack memory
+
+
+
+
+
+top (optinon: p then f): show help in top and select display in main monitor
+top (option: i, 1) 
+
+system process: /proc/...
+ps -eo uid,pid,tid,class,rtprio,ni,pri,psr,pcpu,comm: show each core
+
+apt install sysstat
+pidstat -u -p <PID> <interval> <count>  
+mpstat -P ALL <interval> <count>
