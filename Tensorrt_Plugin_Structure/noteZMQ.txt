@@ -1,0 +1,144 @@
+*************** Basics **************
+// trong C message chứa \0, cần chú ý khích thước message gửi đi --> sử dungjk zhelpers.h
+
+## PUB-SUB
+// "slow join" 
+// khi sử dụng tcp transport sẽ mất thời gian để handshaking trong thời gian này thì publisher vẫn send message trong khi subscriber chỉ sẵn sàng đọc khi kết nối hoàn thành nên dẫn đến mất message --> synchoronize pub and sub để không publish data cho đến khi sub được kết nối và sẵn sàng
+// một sub có thể kế nối nhiều hơn một pub. Data sẽ vào xen kẽ nhau (fair queue) để không một pub nào lấn át
+// nếu pub không được connect sub thì nó đơn giản là drop tất cả message 
+## Parallel pipeline 
+// cần synchoronize điểm bắt đầu của batch với tất cả các worker đang hoạt động. Nếu không dẫn đến việc mất cân bằng dẫn đến không thể chạy song song
+
+
+*************** Socket and Patterns ****************
+## Message 
+PUB-SUB
+PUB-PULL
+// ZMQ sockets chứa message như UDP chứ không phải một luồng bytes như TCP, message là một dữ liệu nhị phân có độ dài được chỉ định.
+zmq_ctx_set(): set number of thread I/O, send queue message for thread I/O send asynchronously
+--------------------------
+int io_threads = 4;
+void *context = zmq_ctx_new ();
+zmq_ctx_set (context, ZMQ_IO_THREADS, io_threads);
+assert (zmq_ctx_get (context, ZMQ_IO_THREADS) == io_threads);
+--------------------------
+
+zmq_setsockopt: set filter
+send multipart message by set a "more" bit to one 
+// Mỗi message có 1 hoặc nhiều part 
+// Mỗi part được gọi là frame 
+// Mỗi part là một zmq_msg_t object 
+// Có thể send và recv mỗi part một cách riêng biệt bằng low-level API
+// Higher-level APIs cung cấp đóng gói và gửi toàn bộ multipart message 
+
+// có thể gửi message có độ dài bằng 0, VD gửi signal từ thread này đến thread khác 
+// ZMQ đảm bảo gửi tất cả các parts của một message, hoặc là không gửi phần nào
+// ZMQ không gửi tin nhắn một cách ngay lập tức, mà vào một thời gian không xác định nào đó, vì thế multipart message phải fit in memory 
+// Vì mesage phải được fit trong memory nên nếu muốn send một file với kích thước bất kì phải break nó thành các pieces và send mỗi piece như một single-part message riêng biệt. Sử dụng multipart data không làm giảm bộ nhớ tiêu tốn. 
+// Phải call zmq_msg_close() khi kết thúc một received message
+
+
+## Multiple Sockets 
+// có thể connect 1 socket tới nhiều endpoint để đọc multiple endpoint cùng một lúc. Điều này là có thể khi những remote endpoints có cùng pattern (các message ở các endpoint có format giống nhau), nhưng nó sẽ không được phép nếu kết nối PULL socket tới PUB endpoint. 
+// Đọc message với multiple sockets trong một lần sử dụng zmq_poll(), tránh nhưng socket được ưu tiên được đọc trước các socket khác
+------------------------------------------
+typedef struct {
+    void *socket;       //  ZeroMQ socket to poll on
+    int fd;             //  OR, native file handle to poll on
+    short events;       //  Events to poll on
+    short revents;      //  Events returned after poll
+} zmq_pollitem_t;
+------------------------------------------
+
+
+## Multiple Message
+// send message với multipart sử dụng cờ sndmore (or ZMQ_SNDMORE), mỗi part là 1 đối tượng zmq_msg lên bao nhiêu part thì phải send bằng đấy lần
+// khi đọc thì đọc như single message trong vòng loop và phải check last message frame bằng zmq_msg_more()
+// khi gửi multipart thì first part chỉ được thực sự gửi lên wire khi mà gửi final part
+// khi sử dụng zmq_poll(), khi nhận được first part của một message thì phân còn lại của message cũng sẽ đảm bảo nhận được 
+// Một khi đã nhận được mesage sẽ nhận được toàn bộ part hoặc là sẽ không nhận được phần nào
+// sẽ nhận được tất cả các part của message dù có check thuộc tính "more" hay không
+// Khi gửi ZMQ sẽ queue message frame trong bộ nhớ cho đến khi cái cuối cùng rồi mới send chúng 
+// Không có cách nào để hủy gửi tin nhắn đã được gửi một phần trừ khi close socket 
+
+
+## Dynamic discovery 
+Trong trường hợp mô hình pub-sub thông thường thì publisher thường là static còn sub dynamic 
+Muốn dynamic cả 2 thì phải dùng intermediaries 
+## Pub-Sub with Proxy 
+// Tạo ra một intermediaries ở middle của network 
+ZMQ build-in proxy Function: zmq_proxy(frontend, backend, capture); 
+Trong đó frontend, backend là các socket (thông thường sẽ dùng proxy với các dạng ROUTER/DEALER, XSUB/XPUB, or PULL/PUSH) 
+-----------------------------------------
+#include "zhelpers.hpp"
+
+int main (int argc, char *argv[])
+{
+    zmq::context_t context(1);
+
+    //  Socket facing clients
+    zmq::socket_t frontend (context, ZMQ_ROUTER);
+    frontend.bind("tcp://*:5559");
+
+    //  Socket facing services
+    zmq::socket_t backend (context, ZMQ_DEALER);
+    backend.bind("tcp://*:5560");
+
+    //  Start the proxy
+    zmq::proxy(static_cast<void*>(frontend),
+               static_cast<void*>(backend),
+               nullptr);
+    return 0;
+}
+---------------------------------------
+
+
+## Bridge (internal network, external network)  
+
+...
+
+
+## Handle Error và ETERM
+// Phương thức tạo object sẽ return NULL nếu fail 
+// Phương thức xử lý data có thể return số lượng bytes đã xử lý, hoặc -1 nếu error hoặc fail 
+// Một số phương thức khác trả về 0 và -1 khi error hoặc fail 
+// error code được cung cấp trong errno hoặc zmq_errno() 
+// các miêu tả về error cho logging được cung cấp bởi zmq_strerror() 
+// khi code recv một message với ZMQ_DONTWAIT option vào không đợi data, ZMQ sẽ trả về -1 và errono == EAGAIN 
+// khi một thread gọi zmq_ctx_destroy(), và các thread khác vẫn đang khóa hoạt động, zmq_ctx_destroy() sẽ đóng context và tất cả các khóa sẽ trả về -1 và errono == ETERM 
+--> sử dụng assert() để catch và dùng chương trình (...use) 
+
+
+## Parallel pipeline with Kill signal (pipeline example in document) 
+Sử dụng multi socket cho đầu vào worker 
+// Sink tạo ra một PUB socket trên một endpoint mới (bind)
+// Các worker kết input socket với endpoint 
+// khi sink phát hiện ra end of batch nó sẽ gửi một kill đến PUB socket dùng s_send (controller, "KILL") của zhelpers.h
+// khi worker phát hiện được kill message đó thì nó sẽ exits
+
+
+## Handle interrupt Signals
+Tạo một hàm sử lý tín hiệu (signal.h) 
+Khởi tạo structure sigaction để catch và tự động sử lý với các tín hiệu chỉ định 
+// Khi code đang được khoá trong một blocking call (đang gửi message, đang nhận một message, đang poll), khi có một tín hiệu gửi đến, call sẽ trả về EINTR
+// s_recv () trả là NULL nếu chúng interrupted 
+để check một EINTR return code, một NULL return, và/hoặc một tín hiệu trả ra từ hàm xử lý tín hiệu vd s_interrupted
+----------------------------------------- 
+s_catch_signals ();
+client = zmq_socket (...);
+while (!s_interrupted) {
+    char *message = s_recv (client);
+    if (!message)
+        break;          //  Ctrl-C used
+}
+zmq_close (client);
+----------------------------------------
+
+
+## Dectectin memory leaks 
+Sử dụng valgrind 
+
+
+## multithreading with ZMQ
+
+ 
