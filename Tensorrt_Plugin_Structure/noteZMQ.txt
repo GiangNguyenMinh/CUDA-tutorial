@@ -11,6 +11,7 @@
 
 
 *************** Socket and Patterns ****************
+inproc giao thức dùng để gửi message giao tiếp giữa các thread 
 ## Message 
 PUB-SUB
 PUB-PULL
@@ -140,5 +141,40 @@ Sử dụng valgrind
 
 
 ## multithreading with ZMQ
+// Cô lập dữ liệu riêng tư trong thread và không chia sẻ dữ liệu với các thread khác. Chỉ có ngoại lệ là ZMQ contexts
+// tránh xa những cơ chế đồng thời cổ điển như mutexes, critical sections, semaphores. 
+// Tạo ZMQ context lúc bắt đầu của process, và pass nó vào tất cả các threads cần để connect thông qua inproc sockets. 
+// Sử dụng attached threads để tạo structure trong ứng dụng, và connect chúng với parent threads sử dụng PAIR socket trên inproc. Mô hình là: bind parent socket, sau đó tạo các child thread kết nối với socket của nó 
+// sử dụng detached threads để mô phỏng nhiêm vụ độc lập với contexts của chúng. Kết nối trên tcp. Sau đó có thể chuyển chúng sáng quy trình độc lập mà không thay đổi nhiều code
+// các giao tiếp giữa các threads diễn ra dưới dạng message. Có thể define ít hoặc nhiều 
+// không chia sẻ ZMQ socket giữa các threads ...
+Chỉ sử dụng hoặc đóng socket trên thread tạo ra chúng 
 
- 
+server ...
+
+
+## signaling between threads (PAIR Sockets)
+sử dụng s_send() và inproc
+
+
+
+
+
+...
+## High-water marks
+// Giải quyết vấn đề A gửi đến B quá nhiểu mà B không xử lý kịp (hay nói cách khác là không có giao tiếp giữa B với A)
+// HWM định nghĩa công xuất của các đường ống bên trong nó. Mỗi connection vào hoặc ra một socket có một đường ống riêng của nó, HWM có thể send, và/hoặc gửi dựa và socket type. sockets (PUB, PUSH) chỉ có gửi buffer, (SUB, PULL, REQ, REP) chỉ nhận buffers, (DEALER, ROUTER, PAIR) có cả send và nhận
+// v2.x là infinity là default, nó dễ dàng nhưng cũng dễ chết publishers. Ở v3.x set default là 1000, nếu dùng v2.x phải set HWM hoặc một con số khác liên quan đến message size
+// khi socket đạt tới HWN, nó sẽ hoặc là block hoặc là drop data dựa vào socket types. PUB, ROUTER socket sẽ drop data; những socket còn lại sẽ block
+// trên inproc transport sender và reciver sẽ chia sẻ chung buffers, nên HWM thực là tổng HWM được set ở cả 2 bên
+
+
+## Missing message problem solver
+// Ở SUB socket, set subscription sử dụng zmq_setsockopt() với ZMQ_SUBSCRIBE, nếu không thì sẽ không nhận được message. Bởi vì subscribe tới message bởi prefix, nếu subscribe tới "", sẽ nhận được bất cứ thứ gì
+// nếu start SUB socket sau khi start PUB socket sẽ bị mất message trước khi kết nối 
+// Thậm trí mếu synchronize SUB vòa PUB vẫn có khả năng mất message vì internal queues không được tạo ra cho đến khi sự kết nối giữa hai khối là hoàn toàn (trong ví dụ tcp) 
+// Nếu sử dụng REP và REQ sockets, và không tuân thủ đồng bộ thứ tự gửi/nhận/gửi/nhận ZMQ sẽ dẫn đến errors, cái mà sẽ bị ignore. Sau đó sẽ giống như loss message. Phải chắc chắn thứ tự gửi/nhận và luôn luôn check errors trong ZMQ call
+// Nếu xử dụng PUSH sockets, thì socket PULL đầu tiên được kết nối sẽ nhận được lượng message không công bằng. Sẽ phải mất vài milliseconds để cân bằng tỉ lệ message. Để thay thế cho PUSH/PULL với tốc độ dữ liệu thấp hơn, thì dùng ROUTER/DEALER sẽ cân bằng mẫu. 
+// Nếu sử dụng inproc thì phải đảm cả 2 sockets ở cùng một context. Nếu không hướng kết nối sẽ bị thất bại. Phải bind trước thâu đó mới connect.
+// Nếu sử dụng ROUTER socket, rất dễ bị mất message một cách vô tình do gửi frame không đúng định dạng (quên không gửi định dạng frame). Set ZMQ_ROUTER_MANDATORY option ở ROUTER sockets là một ý tưởng, nhưng vẫn phải check return code sau mỗi lần call send
+
