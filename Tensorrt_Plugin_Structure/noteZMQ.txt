@@ -178,3 +178,261 @@ sử dụng s_send() và inproc
 // Nếu sử dụng inproc thì phải đảm cả 2 sockets ở cùng một context. Nếu không hướng kết nối sẽ bị thất bại. Phải bind trước thâu đó mới connect.
 // Nếu sử dụng ROUTER socket, rất dễ bị mất message một cách vô tình do gửi frame không đúng định dạng (quên không gửi định dạng frame). Set ZMQ_ROUTER_MANDATORY option ở ROUTER sockets là một ý tưởng, nhưng vẫn phải check return code sau mỗi lần call send
 
+
+
+*********************** Advanced Pub-Sub Patterns **************************************
+## Pros and Cons of Pub-Sub
+Pub-Sub giải quyết vấn dề tin nhắn cũ: multicast - tin nhắn đa hướng và group messaging tin nhắn nhóm 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+************************ Socket API ************************************ https://zeromq.org/socket-api/
+*********************** Socket ZMQ ***************************************
+// ZMQ socket thể hiện sự trừu tượng của một hàng đợi tin nhắn không đồng bộ, với ý nghĩa là xếp hàng chính xác tùy thuộc vào loại socket sử dụng.
+// Các socket thông thường truyền các byte hoặc dữ liệu rời rạc thì các ZMQ socket sẽ truyền các message rời rạc.
+// ZMQ socket là không đồng bộ có nghĩa là thời gian thiết lập kết nối vật lý và ngắt kết nối, kết nối lại và phân phối hiệu quả là minh bạch đối voies người dùng và do ZMQ tổ chức. Xa hơn là các messages có thể được queue trong trường hợp a peer(đối tượng ngang hàng) không có sẵn để nhận nó. 
+// sockets thông thường chỉ cho phép mối quan hệ one-to-one (two peers), many-to-one(many clients, one server), hoặc trong một số trường hợp one-to-many(multicast). Với ngoại lệ PAIR sockets, ZMQ có thể kết nối tới nhiều endpoints, đồng thời chấp nhận các kết nối đến từ nhiều endpoints được liên kết với socket, dó đó cho phép mối quan hệ many-to-many
+
+
+## Socket life time
+4 parts: 
+- Tạo và Xóa socket, đi cùng nhau tạo thành một vòng socket life 
+- Config sockets bằng cách setting option trên chúng và kiểm tra chúng nếu cần thiết 
+- Plugging sockets vào kiến trúc mạng bằng cách tạo ZMQ connections tới vào từ chúng 
+- Sử dụng socket để mang dữ liệu bằng cách viết và nhận dữ liệu trong chúng 
+
+
+## Bind và Connect 
+// Với ZMQ sockets thì việc ai binds, ai connects không quan trọng. Thông thường thì server sẽ sử dụng bind còn client sẽ sử dụng connect 
+// ZMQ tạo queue với mỗi kết nối cơ bản. VD nếu socket kết được kết nối với 3 peer sockets (ngang hàng) thì sẽ có 3 message queue đằng sau đó 
+// Với bind, cho tất cả các peers kết nối tới, do đó không biết được có bao nhiêu peers sẽ được kết nối và không thể tạo queue trước. Thay vào đó queue sẽ được tạo khi mỗi peer rieeng lẻ được kết nối với sockets được ràng buộc (bound socket)
+// Với Connect, nó biết sẽ có ít nhất một peer sẽ tới, nó sẽ tạo một queue ngay lập tức. Điều đó được áp dụng cho tất cả các socket ngoại trừ ROUTER (các queues chỉ được tạo ra sau khi peer mà được kết nối xác nhận kết nối đó. 
+// Tóm lại, khi send một message tới một bound socket với no peers, hoặc một ROUTER với no live connections, sẽ không có quêu để lưu message. 
+ 
+? Khi nào dùng bind và khi nào dùng connect
+// Như một nguyên tắc chung thì bind sẽ đến từ hầu hết các điểm stable trong cấu trúc mạng, vào sử dụng connect từ những thành phần dynamic có endpoints dễ thay đổi. Đối với request/reply, người cũng cấp service sẽ là điểm bind còn clients sẽ sử dụng connect. 
+// Nếu không tìm được phần nào stable hơn (peer-to-peer), xem xét một stable device ở middle, nơi mọi bên đều có thể kết nối tới. 
+
+
+## High-Water-Mark
+Là giới hạn cứng của số lượng lớn nhất của message đang dữ trong bộ nhớ cho một peer cái mà được chỉ định socket giao tiếp với (nói bên trên) 
+
+
+## Message Pattern 
+built-in:
+- Request-reply
+- Pub-sub
+- Pipeline 
+- Exclusive pair 
+dự thảo: 
+- client-sever
+- ratio-dish
+
+
+## Request-reply pattern 
+R-r pattern được hướng tới kiến trúc sevice-oriented khác nhau
+2 lại cơ bản: synchronous (REQ-REP socket), và asynchronous (DEALER-ROUTER socket), và có thể mix theo nhiều cách
+
+++ REQ socket 
+// Được sử dụng bởi một client để gửi yêu cầu tới và nhận replies từ service. Socket loại này chỉ cho phép một chuỗi các sends call và receive calls xen kẽ. Một REQ socket có thể được kết nối nhiều REP hoặc ROUTER sockets. Mỗi request sent được round-robined trong tất cả các service được kết nối, và mỗi reply nhận được sẽ khớp với yêu cầu được đưa ra gần nhất. Độ tin cập đối với failing peers không phải vấn đề. 
+// Nếu không có services nào có sẵn, những hoạt động send trên socket sẽ block đến khi một service trở lên available. REQ sẽ không vứt bất kì message nào 
+----------------------------------------------------------------
+Compatible peer sockets     |  REP, ROUTER
+Direction                   |  Bidirectional 
+Send/receive pattern        |  Send, Receive, send, receive, ...
+Outgoing routing strategy   |  Round-robin 
+Incoming routing strategy   |  Last peer 
+Action in mute state        |  Block 
+----------------------------------------------------------------
+
+++ REP socket 
+// Được sử dụng bởi một service để nhận request và gửi replies tới client. Socket loại này chỉ cho phép một chuỗi các receice call và send calls xen kẽ. Mỗi request nhận được là một  fair-queued từ tất cả các clients, mỗi reply được gửi sẽ được chuyển đến client yêu cầu cuối cùng. Nếu requester gốc ban đầu không còn tồn tại nữa thì reply sẽ được âm thầm loại bỏ
+---------------------------------------------------------------
+Compatible peer sockets     |  REQ, DEALER 
+Direction                   |  Bidirectional 
+Send/receive pattern        |  Receive, send, receive, send ...
+Outgoing routing strategy   |  Fair-robin  
+Incoming routing strategy   |  Last peer 
+---------------------------------------------------------------
+
+++ DEALER socket 
+// DEALER socket nói chuyện với một tập các anonymous peers, sending và receiving message sử dụng thuật toán round-robin. Rất đang tin cậy vì nó không làm mất message. DEALER làm việc như một sự thay thế không đồng bộ cho REQ, cho clients cái mà talk tới REP hoặc ROUTER server. Message nhận được từ DEALER là fair-queued từ tất cả các peers được kết nối. 
+// Khi DEALER socket vào trạng thái mute state nguyên nhân là đạt vào high water mark, đối với all peers, hoặc không có peer nào thì tất cacr các hoạt động send trên socket sẽ block cho đến khi mute state kết thúc hoặc có ít nhất một peer trở lên sẵn sáng cho việc gửi. Message sẽ không bị xóa bỏ. 
+// Khi DEALER socket được kết nối tới REP socket message gửi phải bao gồm một empty frame như là first part của message (dấu phân cách), theo sau là một hoặc nhiểu body parts
+
+----------------------------------------------------------------
+Compatible peer sockets     |  ROUTER, REP, DELAER
+Direction                   |  Bidirectional 
+Send/receive pattern        |  Unrestricted 
+Outgoing routing strategy   |  Round-robin 
+Incoming routing strategy   |  Fair-queued 
+Action in mute state        |  Block 
+----------------------------------------------------------------
+
+++ ROUTER socket 
+// ROUTER socket nói với set of peers, sử dụng địa chỉ cụ thể để mỗi outgoing message được gửi đi tới một peer connection chỉ định. ROUTER làm việc như một sự thay thế bất đồng bộ cho REP, và thường được sử dụng như một server cơ bản để nói chuyện với cả DEALẺ clients
+// Khi nhận message một ROUTER socket sẽ thêm message part chứa routing id của original peer vào phần đầu của message trước khi gửi nó vào ứng dụng. Message nhân là fair-queued giữa các peer đang được connect. Khi send mesage ở ROUTER socket sẽ xóa first part của message và sử dụng nó để xác định routing id của peer message sẽ được route tới. Nếu peer không tồn tại nữa, hoặc không bao giờ tồn tại, message sẽ loại bỏ một cách âm thầm 
+// Khi một ROUTER vào trạng thái mute state bởi vì với tới HWM. đối với tất cả các peers, sau khi message gửi tới socket sẽ bị dropped cho đến khi mute state ends. Tương tự như vậy, bất kì message nào routed tới một peer cái đạt tới HWM cũng sẽ bị dropped. 
+// Khi một REQ socket được connect tới một ROUTER socket, ngoài routing id ở, mỗi message được nhận sẽ chứa thêm một message part trống (delimeter part). 
+// Tóm lại structure của mỗi message nhận được sẽ trở thành: 
+// --> 1 hoặc nhiều routing id part + delimiter part + 1 hoặc nhiều body part
+// Khi send reply tới một REQ socket application sẽ bao gồm delimiter part 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  REQ, ROUTER, DELAER
+Direction                   |  Bidirectional 
+Send/receive pattern        |  Unrestricted 
+Outgoing routing strategy   |  trong mô tả  
+Incoming routing strategy   |  Fair-queued 
+Action in mute state        |  Drop (trong mô tả)
+----------------------------------------------------------------
+
+
+## Publish-subscribe pattern 
+Mẫu publish-subscribe được sử dụng cho phân phối one-to-many, dữ liệu từ 1 publisher tới nhiều subcribers
+Hỗ trợ Pub/Sub bằng các loại socket sau: 
+- PUB 
+- XPUB
+- SUB 
+- XSUB 
+
+++ Topics 
+ZMQ sử dụng multipart message để truyền tải thông tin chủ đề. Topics được thể hiện dưới dạng mảng của bytes, mặc dù có thể sử dụng string hoặc encode text phù hợp
+Một publisher phải bao gồm topic trong frame đầu tiền của message, trước message payload. 
+
+Exe: send message to "status" topic  
+--------------------------------------------- Publisher -----------------------------------------
+publisher.send(zmq::str_buffer("status"), zmq::send_flags::sndmore);  // fist part is topic 
+publisher.send(zmq::str_buffer("Message in status"));                 // payload after
+--------------------------------------------------------------------------------------------------
+
+--------------------------------------------- Subscriber -----------------------------------------
+subscriber.set(zmq::sockopt::subscribe, "status");
+
+while(true){
+    // Receive all parts of the message
+    std::vector<zmq::message_t> recv_msgs;
+    zmq::recv_result_t result = zmq::recv_multipart(subscriber, std::back_inserter(recv_msgs));
+    assert(result && "recv failed");
+    assert(*result == 2);
+
+    std::cout << "Subscriber: [" << recv_msgs[0].to_string() << "] "
+                  << recv_msgs[1].to_string() << std::endl;
+    }
+-----------------------------------------------------------------------------------------------------
+
+// Một subscriber có thể có nhiều subscription filters
+// Sử dụng prefix check topic (vs suber sub "topic" sẽ nhận được message topic, topic/subtopic, topical và sẽ không nhận được topi, TOPIC) 
+// Nếu để là "" sẽ nhận được toàn bộ topic
+
+++ PUB socket 
+// PUB socket có thể được sử dụng bởi một publisher để phân phối dữ liệu. Message gửi được phân phối như một fan out đến tất cả các connected peers
+// Loại socket này không thể nhận message 
+// Khi một PUB socket vào trạng thái mute state vì HWM cho một subscriber, thì bất cứ message nào được gửi tới subscriber đó trong đề cập sẽ bị droped cho đến khi kết thúc mute state. Send function sẽ không bao giờ bị block bơi loại socket này 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  SUB, XSUB 
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Send only  
+Outgoing routing strategy   |  Fan out 
+Incoming routing strategy   |  N/A  
+Action in mute state        |  Drop
+----------------------------------------------------------------
+
+++ SUB socket 
+// Một SUB socket được sử dụng như một subscriber để subcribe tới dữ nhiệu được phân phối bởi publisher
+// Khởi tạo một SUB socket không subscribe tới bất kì message nào
+// Send function không được thực thi cho loại socket này 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  PUB, XPUB 
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Receive only  
+Outgoing routing strategy   |  N/A
+Incoming routing strategy   |  Fair-queue 
+----------------------------------------------------------------
+
+++ XPUB socket 
+// Giống như PUB ngoại trừ có thể nhận subscriptions từ những peers dưới dạng tin nhắn đến.
+// Subscripon message là một byte 1(cho subscriptions) hoặc byte 0 (cho unsubscriptions) theo sau là subscription body. Message mà không có sub/unsub prefix cũng được nhận, nhưng sẽ không có hiêu lực trong subsscrition status. 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  ZMQ_SUB, ZMQ_XSUB 
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Send messages, receive subscriptions   
+Outgoing routing strategy   |  Fan out 
+Incoming routing strategy   |  N/A  
+Action in mute state        |  Drop
+----------------------------------------------------------------
+
+++ XSUB socket 
+// Giống với SUB ngoại trừ có thể subscribe bằng cách send subscription message tới socket. 
+// Subscripon message là một byte 1(cho subscriptions) hoặc byte 0 (cho unsubscriptions) theo sau là subscription body. Message mà không có sub/unsub prefix cũng được gửi, nhưng sẽ không có hiêu lực trong subsscrition status. 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  ZMQ_PUB, ZMQ_XPUB 
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Receive messages, send subscriptions   
+Outgoing routing strategy   |  N/A 
+Incoming routing strategy   |  Fair-queued  
+Action in mute state        |  Drop
+----------------------------------------------------------------
+
+## Pipeline pattern 
+Pipeline pattern hướng tới phân công việc, đặc trưng là một quy trình nhiều giai đoạn trong đó một hoặc vài node đẩy công việc cho nhiều công nhân, và họ sẽ push lại kết quả cho một hoặc nhiều collectors. Pattern này hầu như đáng tin cậy vì nó sẽ không bỏ message trừ khi một node ngắt kết nối bất ngờ. Nó có khả năng scale khi mà các node có thể join bất kì thời điểm nào. 
+ZeroMQ sẽ support với 2 loại socket đó là: 
+- PUSH 
+- PULL 
+
+++ PUSH socket 
+// PUSH socket sẽ nói chuyện với tập các anonymous PULL peers
+// Gửi message sử dụng round-robin
+// không sử dụng hoạt động receive trong loại socket này 
+// Khi một PUSH socket vào trạng thái mute state bởi HWM từ tất cả các nodes downstream, hoặc không có bất kì một downstream node nào, thì tất cả các send message trong socket sẽ bị block cho đến khi mute state kết thúc hoặc có ít nhất một downstream node có sẵn để sending. Message sẽ không bị bỏ đi 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  PULL 
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Send only   
+Outgoing routing strategy   |  Round-robin 
+Incoming routing strategy   |  N/A  
+Action in mute state        |  Block 
+----------------------------------------------------------------
+
+++ PULL socket 
+PULL socket nói chuyện với tập của anonymous PUSH peer, nhận message sử dụng fair-queue 
+
+----------------------------------------------------------------
+Compatible peer sockets     |  PUSH  
+Direction                   |  Unidirectional 
+Send/receive pattern        |  Receive only    
+Outgoing routing strategy   |  N/A
+Incoming routing strategy   |  Fair-queued  
+Action in mute state        |  Block 
+----------------------------------------------------------------
