@@ -1,3 +1,7 @@
+https://github.com/zeromq/libzmq.git
+https://github.com/zeromq/cppzmq.git
+https://github.com/booksbyus/zguide.git
+
 *************** Basics **************
 // trong C message chứa \0, cần chú ý khích thước message gửi đi --> sử dungjk zhelpers.h
 
@@ -203,20 +207,11 @@ Pub-Sub giải quyết vấn dề tin nhắn cũ: multicast - tin nhắn đa hư
 
 
 
-
-
-
-
-
-
-
-
-
 ************************ Socket API ************************************ https://zeromq.org/socket-api/
 *********************** Socket ZMQ ***************************************
-// ZMQ socket thể hiện sự trừu tượng của một hàng đợi tin nhắn không đồng bộ, với ý nghĩa là xếp hàng chính xác tùy thuộc vào loại socket sử dụng.
+// ZMQ socket là một hàng đợi tin nhắn không đồng bộ, với ý nghĩa là xếp hàng chính xác tùy thuộc vào loại socket sử dụng.
 // Các socket thông thường truyền các byte hoặc dữ liệu rời rạc thì các ZMQ socket sẽ truyền các message rời rạc.
-// ZMQ socket là không đồng bộ có nghĩa là thời gian thiết lập kết nối vật lý và ngắt kết nối, kết nối lại và phân phối hiệu quả là minh bạch đối voies người dùng và do ZMQ tổ chức. Xa hơn là các messages có thể được queue trong trường hợp a peer(đối tượng ngang hàng) không có sẵn để nhận nó. 
+// ZMQ socket là không đồng bộ có nghĩa là thời gian thiết lập kết nối vật lý và ngắt kết nối, kết nối lại và phân phối hiệu quả là minh bạch đối với người dùng và do ZMQ tổ chức. Xa hơn là các messages có thể được queue trong trường hợp a peer(đối tượng ngang hàng) không có sẵn để nhận nó. 
 // sockets thông thường chỉ cho phép mối quan hệ one-to-one (two peers), many-to-one(many clients, one server), hoặc trong một số trường hợp one-to-many(multicast). Với ngoại lệ PAIR sockets, ZMQ có thể kết nối tới nhiều endpoints, đồng thời chấp nhận các kết nối đến từ nhiều endpoints được liên kết với socket, dó đó cho phép mối quan hệ many-to-many
 
 
@@ -283,7 +278,7 @@ Incoming routing strategy   |  Last peer
 
 ++ DEALER socket 
 // DEALER socket nói chuyện với một tập các anonymous peers, sending và receiving message sử dụng thuật toán round-robin. Rất đang tin cậy vì nó không làm mất message. DEALER làm việc như một sự thay thế không đồng bộ cho REQ, cho clients cái mà talk tới REP hoặc ROUTER server. Message nhận được từ DEALER là fair-queued từ tất cả các peers được kết nối. 
-// Khi DEALER socket vào trạng thái mute state nguyên nhân là đạt vào high water mark, đối với all peers, hoặc không có peer nào thì tất cacr các hoạt động send trên socket sẽ block cho đến khi mute state kết thúc hoặc có ít nhất một peer trở lên sẵn sáng cho việc gửi. Message sẽ không bị xóa bỏ. 
+// Khi DEALER socket vào trạng thái mute state nguyên nhân là đạt vào high water mark, đối với all peers, hoặc không có peer nào thì tất cả các hoạt động send trên socket sẽ block cho đến khi mute state kết thúc hoặc có ít nhất một peer trở lên sẵn sáng cho việc gửi. Message sẽ không bị xóa bỏ. 
 // Khi DEALER socket được kết nối tới REP socket message gửi phải bao gồm một empty frame như là first part của message (dấu phân cách), theo sau là một hoặc nhiểu body parts
 
 ----------------------------------------------------------------
@@ -296,7 +291,7 @@ Action in mute state        |  Block
 ----------------------------------------------------------------
 
 ++ ROUTER socket 
-// ROUTER socket nói với set of peers, sử dụng địa chỉ cụ thể để mỗi outgoing message được gửi đi tới một peer connection chỉ định. ROUTER làm việc như một sự thay thế bất đồng bộ cho REP, và thường được sử dụng như một server cơ bản để nói chuyện với cả DEALẺ clients
+// ROUTER socket nói với set of peers, sử dụng địa chỉ cụ thể để mỗi outgoing message được gửi đi tới một peer connection chỉ định. ROUTER làm việc như một sự thay thế bất đồng bộ cho REP, và thường được sử dụng như một server cơ bản để nói chuyện với cả DEALER clients
 // Khi nhận message một ROUTER socket sẽ thêm message part chứa routing id của original peer vào phần đầu của message trước khi gửi nó vào ứng dụng. Message nhân là fair-queued giữa các peer đang được connect. Khi send mesage ở ROUTER socket sẽ xóa first part của message và sử dụng nó để xác định routing id của peer message sẽ được route tới. Nếu peer không tồn tại nữa, hoặc không bao giờ tồn tại, message sẽ loại bỏ một cách âm thầm 
 // Khi một ROUTER vào trạng thái mute state bởi vì với tới HWM. đối với tất cả các peers, sau khi message gửi tới socket sẽ bị dropped cho đến khi mute state ends. Tương tự như vậy, bất kì message nào routed tới một peer cái đạt tới HWM cũng sẽ bị dropped. 
 // Khi một REQ socket được connect tới một ROUTER socket, ngoài routing id ở, mỗi message được nhận sẽ chứa thêm một message part trống (delimeter part). 
@@ -436,3 +431,9 @@ Outgoing routing strategy   |  N/A
 Incoming routing strategy   |  Fair-queued  
 Action in mute state        |  Block 
 ----------------------------------------------------------------
+
+
+&&& Note &&& 
+// REP và REQ khi send sẽ tự động thêm delimiter part vào first part của message; còn đối với ROUTER và DEALER cần phải xử lý multipart message
+// ROUTER có thể nhận nhiều request 1 lúc mà không phải đợi send rồi mới được nhận tiếp (mô hình nhiểu REQ và 1 ROUTER). Đối với mô hình REQ-ROUTER, khi REQ khi send nó sẽ tự thêm identity + delimiter vào message nó gửi đi. ROUTER sẽ phải đọc lần lượt nó (bằng tay), và khi reply lại cần cấu hình multipart identity + delimiter + message 
+// DEALER có thể send nhiều request 1 lúc mà không cần phải chờ đợi đến khi nhận được reply 
