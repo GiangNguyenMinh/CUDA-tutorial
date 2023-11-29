@@ -433,7 +433,244 @@ Action in mute state        |  Block
 ----------------------------------------------------------------
 
 
-&&& Note &&& 
+&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& Note &&& 
 // REP và REQ khi send sẽ tự động thêm delimiter part vào first part của message; còn đối với ROUTER và DEALER cần phải xử lý multipart message
-// ROUTER có thể nhận nhiều request 1 lúc mà không phải đợi send rồi mới được nhận tiếp (mô hình nhiểu REQ và 1 ROUTER). Đối với mô hình REQ-ROUTER, khi REQ khi send nó sẽ tự thêm identity + delimiter vào message nó gửi đi. ROUTER sẽ phải đọc lần lượt nó (bằng tay), và khi reply lại cần cấu hình multipart identity + delimiter + message 
-// DEALER có thể send nhiều request 1 lúc mà không cần phải chờ đợi đến khi nhận được reply 
+// ROUTER có thể nhận nhiều request 1 lúc mà không phải đợi send rồi mới được nhận tiếp (mô hình nhiểu REQ và 1 ROUTER). Đối với mô hình REQ-ROUTER, khi REQ khi send nó sẽ tự thêm identity + delimiter vào message nó gửi đi. ROUTER sẽ phải đọc lần lượt nó (bằng tay), và khi reply lại cần cấu hình multipart: identity + delimiter + message (hoặc ngắn gọn với delimiter + nessage, khi đố thì sẽ tự sinh ra identity tự động) hoặc send single part với s_send và không set ZMQ_SNDMORE
+// DEALER có gửi nhiểu request 1 lúc mà không cần đợi có reply về. DEALER có thể gửi dạng đầy đủ multipart: identity + delimiter + message (hoặc delimiter + message, identity sẽ sinh tự động) hoặc send single part 
+
+Exp ROUTER-REQ
+--------------------------------------------------------------------
+
+#include "zhelpers.hpp"
+#include <pthread.h>
+
+static void *
+worker_thread(void *arg) {
+    zmq::context_t context(1);
+    zmq::socket_t worker(context, ZMQ_REQ);
+
+    //  We use a string identity for ease here
+#if (defined (WIN32))
+    s_set_id(worker, (intptr_t)arg);
+    worker.connect("tcp://localhost:5671"); // "ipc" doesn't yet work on windows.
+#else
+    s_set_id(worker);
+    worker.connect("ipc://routing.ipc");
+#endif
+
+    int total = 0;
+    while (1) {
+        //  Tell the broker we're ready for work
+        s_send(worker, std::string("Hi Boss"));
+
+        //  Get workload from broker, until finished
+        std::string workload = s_recv(worker);
+        if ("Fired!" == workload) {
+            std::cout << "Processed: " << total << " tasks" << std::endl;
+            break;
+        }
+        total++;
+
+        //  Do some random work
+        s_sleep(within(500) + 1);
+    }
+    return NULL;
+}
+
+int main() {
+    zmq::context_t context(1);
+    zmq::socket_t broker(context, ZMQ_ROUTER);
+
+#if (defined(WIN32))
+    broker.bind("tcp://*:5671"); // "ipc" doesn't yet work on windows.
+#else
+    broker.bind("ipc://routing.ipc");
+#endif
+
+    const int NBR_WORKERS = 10;
+    pthread_t workers[NBR_WORKERS];
+    for (int worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++) {
+        pthread_create(workers + worker_nbr, NULL, worker_thread, (void *)(intptr_t)worker_nbr);
+    }
+
+    //  Run for five seconds and then tell workers to end
+    int64_t end_time = s_clock() + 5000;
+    int workers_fired = 0;
+    while (1) {
+        //  Next message gives us least recently used worker
+        std::string identity = s_recv(broker);
+        s_recv(broker);     //  Envelope delimiter
+        s_recv(broker);     //  Response from worker       
+        
+        s_sendmore(broker, identity);
+        s_sendmore(broker, std::string(""));
+        //  Encourage workers until it's time to fire them
+        if (s_clock() < end_time)
+            s_send(broker, std::string("Work harder"));
+        else {
+            s_send(broker, std::string("Fired!"));
+            if (++workers_fired == NBR_WORKERS)
+                break;
+        }
+    }
+
+    for (int worker_nbr = 0; worker_nbr < NBR_WORKERS; worker_nbr++) {
+        pthread_join(workers[worker_nbr], NULL);
+    }
+    return 0;
+}
+-------------------------------------------------------------------------------------------------------
+
+Exp ROUTER-DELAER
+------------------------------------------------------------------------------------------------------
+#include "zhelpers.hpp"
+#include <pthread.h>
+
+static void *
+worker_task(void *args)
+{
+    zmq::context_t context(1);
+    zmq::socket_t worker(context, ZMQ_DEALER);
+
+#if (defined (WIN32))
+    s_set_id(worker, (intptr_t)args);
+#else
+    s_set_id(worker);          //  Set a printable identity
+#endif
+
+    worker.connect("tcp://localhost:5671");
+
+    int total = 0;
+    while (1) {
+        //  Tell the broker we're ready for work
+        s_sendmore(worker, std::string(""));
+        s_send(worker, std::string("Hi Boss"));
+
+        //  Get workload from broker, until finished
+        s_recv(worker);     //  Envelope delimiter
+        std::string workload = s_recv(worker);
+        //  .skip
+        if ("Fired!" == workload) {
+            std::cout << "Completed: " << total << " tasks" << std::endl;
+            break;
+        }
+        total++;
+
+        //  Do some random work
+        s_sleep(within(500) + 1);
+    }
+
+    return NULL;
+}
+
+//  .split main task
+//  While this example runs in a single process, that is just to make
+//  it easier to start and stop the example. Each thread has its own
+//  context and conceptually acts as a separate process.
+int main() {
+    zmq::context_t context(1);
+    zmq::socket_t broker(context, ZMQ_ROUTER);
+
+    broker.bind("tcp://*:5671");
+    srandom((unsigned)time(NULL));
+
+    const int NBR_WORKERS = 10;
+    pthread_t workers[NBR_WORKERS];
+    for (int worker_nbr = 0; worker_nbr < NBR_WORKERS; ++worker_nbr) {
+        pthread_create(workers + worker_nbr, NULL, worker_task, (void *)(intptr_t)worker_nbr);
+    }
+
+
+    //  Run for five seconds and then tell workers to end
+    int64_t end_time = s_clock() + 5000;
+    int workers_fired = 0;
+    while (1) {
+        //  Next message gives us least recently used worker
+        std::string identity = s_recv(broker);
+        {
+            s_recv(broker);     //  Envelope delimiter
+            s_recv(broker);     //  Response from worker
+        }
+
+        s_sendmore(broker, identity);
+        s_sendmore(broker, std::string(""));
+
+        //  Encourage workers until it's time to fire them
+        if (s_clock() < end_time)
+            s_send(broker, std::string("Work harder"));
+        else {
+            s_send(broker, std::string("Fired!"));
+            if (++workers_fired == NBR_WORKERS)
+                break;
+        }
+    }
+
+    for (int worker_nbr = 0; worker_nbr < NBR_WORKERS; ++worker_nbr) {
+        pthread_join(workers[worker_nbr], NULL);
+    }
+
+    return 0;
+}
+----------------------------------------------------------------------------------------------------------
+
+Exp kiểm tra xem có phải sendmore không bằng gstsocketopt(ZMQ_RCVMORE, &more, &more_size)
+----------------------------------------------------------------------------------------------------------
+#include "zhelpers.hpp"
+
+
+int main (int argc, char *argv[])
+{
+    //  Prepare our context and sockets
+    zmq::context_t context(1);
+    zmq::socket_t frontend (context, ZMQ_ROUTER);
+    zmq::socket_t backend (context, ZMQ_DEALER);
+
+    frontend.bind("tcp://*:5559");
+    backend.bind("tcp://*:5560");
+
+    //  Initialize poll set
+    zmq::pollitem_t items [] = {
+        { frontend, 0, ZMQ_POLLIN, 0 },
+        { backend, 0, ZMQ_POLLIN, 0 }
+    };
+    
+    //  Switch messages between sockets
+    while (1) {
+        zmq::message_t message;
+        int more;               //  Multipart detection
+
+        zmq::poll (&items [0], 2, -1);
+        
+        if (items [0].revents & ZMQ_POLLIN) {
+            while (1) {
+                //  Process all parts of the message
+                frontend.recv(&message);
+                // frontend.recv(message, zmq::recv_flags::none); // new syntax
+                size_t more_size = sizeof (more);
+                frontend.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+                backend.send(message, more? ZMQ_SNDMORE: 0);
+                // more = frontend.get(zmq::sockopt::rcvmore); // new syntax
+                // backend.send(message, more? zmq::send_flags::sndmore : zmq::send_flags::none);
+                
+                if (!more)
+                    break;      //  Last message part
+            }
+        }
+        if (items [1].revents & ZMQ_POLLIN) {
+            while (1) {
+                //  Process all parts of the message
+                backend.recv(&message);
+                size_t more_size = sizeof (more);
+                backend.getsockopt(ZMQ_RCVMORE, &more, &more_size);
+                frontend.send(message, more? ZMQ_SNDMORE: 0);
+                // more = backend.get(zmq::sockopt::rcvmore); // new syntax
+                //frontend.send(message, more? zmq::send_flags::sndmore : zmq::send_flags::none);
+
+                if (!more)
+                    break;      //  Last message part
+            }
+        }
+    }
+    return 0;
+}
+-----------------------------------------------------------------------------------------------------------
